@@ -113,9 +113,11 @@ class Task:
 df = pd.DataFrame()
 tasks = [
     Task(data_loader.get_year, "YearPredictionMSD", "Regression", "RMSE"),
-    Task(data_loader.get_synthetic_regression, "synthetic", "Regression", "RMSE"),
-    Task(data_loader.get_higgs, "higgs", "Classification", "Accuracy"),
-    Task(data_loader.get_cover_type, "cover_type", "Multiclass classification", "Accuracy"),
+    Task(data_loader.get_synthetic_regression, "Synthetic", "Regression", "RMSE"),
+    Task(data_loader.get_higgs, "Higgs", "Classification", "Accuracy"),
+    Task(data_loader.get_cover_type, "Cover Type", "Multiclass classification", "Accuracy"),
+    Task(data_loader.get_bosch, "Bosch", "Classification", "Accuracy"),
+    Task(data_loader.get_airline, "Airline", "Classification", "Accuracy"),
 ]
 
 for task in tasks:
