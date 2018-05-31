@@ -1,4 +1,5 @@
 import time
+import argparse
 
 import ml_dataset_loader.datasets as data_loader
 import numpy as np
@@ -7,9 +8,9 @@ import xgboost as xgb
 from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.model_selection import train_test_split
 
-random_seed = 0
 
-num_rows = 1000
+# Global parameters
+random_seed = 0
 
 
 class Data:
@@ -70,58 +71,75 @@ def configure_xgboost(data, params):
         raise ValueError("Unknown task: " + data.task)
 
 
-def run_xgboost(data, params):
+def run_xgboost(data, params, args):
     dtrain = xgb.DMatrix(data.X_train, data.y_train)
     dval = xgb.DMatrix(data.X_val, data.y_val)
     dtest = xgb.DMatrix(data.X_test, data.y_test)
     start = time.time()
-    bst = xgb.train(params, dtrain, 10, [(dtrain, "train"), (dval, "val")])
+    bst = xgb.train(params, dtrain, args.num_rounds, [(dtrain, "train"), (dval, "val")])
     elapsed = time.time() - start
     pred = bst.predict(dtest)
     metric = eval(data, pred)
     return elapsed, metric
 
 
-def train_xgboost_cpu(data, df):
+def train_xgboost_cpu(data, df, args):
     params = {'tree_method': 'hist'}
     configure_xgboost(data, params)
-    elapsed, metric = run_xgboost(data, params)
+    elapsed, metric = run_xgboost(data, params, args)
     add_data(df, 'xgb-cpu-hist', data, elapsed, metric)
 
 
-def train_xgboost_gpu(data, df):
+def train_xgboost_gpu(data, df, args):
     params = {'tree_method': 'gpu_hist'}
     configure_xgboost(data, params)
-    elapsed, metric = run_xgboost(data, params)
+    elapsed, metric = run_xgboost(data, params, args)
     add_data(df, 'xgb-gpu-hist', data, elapsed, metric)
 
 
-class Task:
+class Experiment:
     def __init__(self, data_func, name, task, metric):
         self.data_func = data_func
         self.name = name
         self.task = task
         self.metric = metric
 
-    def run(self, df):
-        X, y = self.data_func(num_rows=num_rows)
+    def run(self, df, args):
+        X, y = self.data_func(num_rows=args.rows)
         data = Data(X, y, self.name, self.task, self.metric)
-        train_xgboost_cpu(data, df)
-        train_xgboost_gpu(data, df)
+        train_xgboost_cpu(data, df, args)
+        train_xgboost_gpu(data, df, args)
 
 
-df = pd.DataFrame()
-tasks = [
-    Task(data_loader.get_year, "YearPredictionMSD", "Regression", "RMSE"),
-    Task(data_loader.get_synthetic_regression, "Synthetic", "Regression", "RMSE"),
-    Task(data_loader.get_higgs, "Higgs", "Classification", "Accuracy"),
-    Task(data_loader.get_cover_type, "Cover Type", "Multiclass classification", "Accuracy"),
-    Task(data_loader.get_bosch, "Bosch", "Classification", "Accuracy"),
-    Task(data_loader.get_airline, "Airline", "Classification", "Accuracy"),
+experiments = [
+    Experiment(data_loader.get_year, "YearPredictionMSD", "Regression", "RMSE"),
+    Experiment(data_loader.get_synthetic_regression, "Synthetic", "Regression", "RMSE"),
+    Experiment(data_loader.get_higgs, "Higgs", "Classification", "Accuracy"),
+    Experiment(data_loader.get_cover_type, "Cover Type", "Multiclass classification", "Accuracy"),
+    Experiment(data_loader.get_bosch, "Bosch", "Classification", "Accuracy"),
+    Experiment(data_loader.get_airline, "Airline", "Classification", "Accuracy"),
 ]
 
-for task in tasks:
-    task.run(df)
 
-df.columns = pd.MultiIndex.from_tuples(df.columns)
-print(df)
+def main():
+    all_dataset_names = ''
+    for exp in experiments:
+        all_dataset_names+=exp.name + ','
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--rows', type=int, default=None)
+    parser.add_argument('--num_rounds', type=int, default=500)
+    parser.add_argument('--datasets', default=all_dataset_names)
+    args = parser.parse_args()
+    df = pd.DataFrame()
+    for exp in experiments:
+        if exp.name in args.datasets:
+            exp.run(df, args)
+    df.columns = pd.MultiIndex.from_tuples(df.columns)
+    print(df)
+    filename = "table.txt"
+    with open(filename, "w") as file:
+        file.write(df.to_latex())
+    print("Results written to: "+filename)
+
+if __name__== "__main__":
+  main()
