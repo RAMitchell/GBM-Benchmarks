@@ -1,13 +1,15 @@
-import time
 import argparse
+import time
 
+# sys.path.insert(0,'catboost/catboost/python-package')
+# import catboost as cat
+import lightgbm as lgb
 import ml_dataset_loader.datasets as data_loader
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import mean_squared_error, accuracy_score
 from sklearn.model_selection import train_test_split
-
 
 # Global parameters
 random_seed = 0
@@ -97,6 +99,27 @@ def train_xgboost_gpu(data, df, args):
     add_data(df, 'xgb-gpu-hist', data, elapsed, metric)
 
 
+def configure_lightgbm(data, params):
+    params.update({
+        'task': 'train',
+        'boosting_type': 'gbdt',
+        'objective': 'regression',
+        'metric': {'l2', 'auc'},
+        'num_leaves': 2**6,
+        'verbose': 0})
+
+
+def train_lightgbm_cpu(data, df, args):
+    params = {}
+    configure_lightgbm(data, params)
+    lgb_train = lgb.Dataset(X_train, y_train)
+    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+    gbm = lgb.train(params,
+                    lgb_train,
+                    num_boost_round=args.num_round,
+                    valid_sets=lgb_eval)
+
+
 class Experiment:
     def __init__(self, data_func, name, task, metric):
         self.data_func = data_func
@@ -124,7 +147,7 @@ experiments = [
 def main():
     all_dataset_names = ''
     for exp in experiments:
-        all_dataset_names+=exp.name + ','
+        all_dataset_names += exp.name + ','
     parser = argparse.ArgumentParser()
     parser.add_argument('--rows', type=int, default=None)
     parser.add_argument('--num_rounds', type=int, default=500)
@@ -139,7 +162,8 @@ def main():
     filename = "table.txt"
     with open(filename, "w") as file:
         file.write(df.to_latex())
-    print("Results written to: "+filename)
+    print("Results written to: " + filename)
 
-if __name__== "__main__":
-  main()
+
+if __name__ == "__main__":
+    main()
