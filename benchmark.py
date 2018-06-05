@@ -1,8 +1,9 @@
 import argparse
 import time
+import sys
 
-# sys.path.insert(0,'catboost/catboost/python-package')
-# import catboost as cat
+sys.path.insert(0,'catboost/catboost/python-package')
+import catboost as cat
 import lightgbm as lgb
 import ml_dataset_loader.datasets as data_loader
 import numpy as np
@@ -163,6 +164,18 @@ def train_lightgbm_gpu(data, df, args):
     elapsed,metric = run_lightgbm(data,params,args)
     add_data(df, 'lightgbm-gpu', data, elapsed, metric)
 
+def run_catboost(data, params, args):
+    cat_train = cat.Pool(data.X_train,data.y_train)
+    cat_test = cat.Pool(data.X_test,data.y_test)
+    cat_val = cat.Pool(data.X_val,data.y_val)
+
+def train_catboost_cpu(data, df, args):
+    if 'cat-cpu' not in args.algs:
+        return
+    params = {}
+    elapsed, metric = run_catboost(data,params,args)
+    add_data(df, 'cat-cpu', data, elapsed, metric)
+
 class Experiment:
     def __init__(self, data_func, name, task, metric):
         self.data_func = data_func
@@ -197,7 +210,8 @@ def main():
     parser.add_argument('--rows', type=int, default=None)
     parser.add_argument('--num_rounds', type=int, default=500)
     parser.add_argument('--datasets', default=all_dataset_names)
-    parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-cpu')
+    parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-cpu,'
+                                          'cat-cpu')
     args = parser.parse_args()
     df = pd.DataFrame()
     for exp in experiments:

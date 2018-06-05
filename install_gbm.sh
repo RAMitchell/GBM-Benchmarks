@@ -19,8 +19,6 @@ cd python-package/
 python setup.py install
 cd ../..
 
-# Temporarily disabled
-: <<'END'
 # Catboost
 rm -rf catboost
 git clone https://github.com/catboost/catboost.git
@@ -29,7 +27,6 @@ git checkout ${catboost_commit}
 cd catboost/python-package/catboost
 ../../../ya make -r -DUSE_ARCADIA_PYTHON=no -DOS_SDK=local -DPYTHON_CONFIG=/usr/bin/python3-config
 cd ../../../..
-END
 
 # LightGBM
 rm -rf LightGBM
