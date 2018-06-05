@@ -41,6 +41,9 @@ def eval(data, pred):
         # Threshold prediction if binary classification
         if data.task == "Classification":
             pred = pred > 0.5
+        elif data.task == "Multiclass classification":
+            if pred.ndim > 1:
+                pred = np.argmax(pred, axis=1)
         return accuracy_score(data.y_test, pred)
     else:
         raise ValueError("Unknown metric: " + data.metric)
@@ -59,19 +62,51 @@ def add_data(df, algorithm, data, elapsed, metric):
     df.at[algorithm, metric_col] = metric
 
 
-def configure_xgboost(data, params):
-    params.update({'max_depth': 0, 'grow_policy': 'lossguide',
-                   'max_leaves': 2 ** 6})
+def configure_xgboost(data, use_gpu):
+    params = {'max_depth': 0, 'grow_policy': 'lossguide',
+                   'max_leaves': 2 ** 6, 'learning_rate': 0.1}
+    if use_gpu:
+        params['tree_method'] = 'gpu_hist'
+    else:
+        params['tree_method'] = 'hist'
+
     if data.task == "Regression":
         params["objective"] = "reg:linear"
+        if use_gpu:
+            params["objective"] = "gpu:" + params["objective"]
     elif data.task == "Multiclass classification":
         params["objective"] = "multi:softmax"
         params["num_class"] = np.max(data.y_test) + 1
     elif data.task == "Classification":
         params["objective"] = "binary:logistic"
+        if use_gpu:
+            params["objective"] = "gpu:" + params["objective"]
     else:
         raise ValueError("Unknown task: " + data.task)
 
+    return params
+
+def configure_lightgbm(data, use_gpu):
+    params = {
+        'task': 'train',
+        'boosting_type': 'gbdt',
+        'num_leaves': 2 ** 6,
+        'learning_rate': 0.1, 'min_data_in_leaf': 0, 'min_sum_hessian_in_leaf': 1, 'lambda_l2': 1}
+
+    if use_gpu:
+        params["device"] = "gpu"
+
+    if data.task == "Regression":
+        params["objective"] = "regression"
+    elif data.task == "Multiclass classification":
+        params["objective"] = "multiclass"
+        params["num_class"] = np.max(data.y_test) + 1
+    elif data.task == "Classification":
+        params["objective"] = "binary"
+    else:
+        raise ValueError("Unknown task: " + data.task)
+
+    return params
 
 def run_xgboost(data, params, args):
     dtrain = xgb.DMatrix(data.X_train, data.y_train)
@@ -86,39 +121,47 @@ def run_xgboost(data, params, args):
 
 
 def train_xgboost_cpu(data, df, args):
-    params = {'tree_method': 'hist'}
-    configure_xgboost(data, params)
+    if 'xgb-cpu-hist' not in args.algs:
+        return
+    params = configure_xgboost(data, use_gpu=False)
     elapsed, metric = run_xgboost(data, params, args)
     add_data(df, 'xgb-cpu-hist', data, elapsed, metric)
 
 
 def train_xgboost_gpu(data, df, args):
-    params = {'tree_method': 'gpu_hist'}
-    configure_xgboost(data, params)
+    if 'xgb-gpu-hist' not in args.algs:
+        return
+    params = configure_xgboost(data, use_gpu=True)
     elapsed, metric = run_xgboost(data, params, args)
     add_data(df, 'xgb-gpu-hist', data, elapsed, metric)
 
 
-def configure_lightgbm(data, params):
-    params.update({
-        'task': 'train',
-        'boosting_type': 'gbdt',
-        'objective': 'regression',
-        'metric': {'l2', 'auc'},
-        'num_leaves': 2**6,
-        'verbose': 0})
-
-
-def train_lightgbm_cpu(data, df, args):
-    params = {}
-    configure_lightgbm(data, params)
-    lgb_train = lgb.Dataset(X_train, y_train)
-    lgb_eval = lgb.Dataset(X_test, y_test, reference=lgb_train)
+def run_lightgbm(data, params, args):
+    lgb_train = lgb.Dataset(data.X_train, data.y_train)
+    lgb_eval = lgb.Dataset(data.X_test, data.y_test, reference=lgb_train)
+    start = time.time()
     gbm = lgb.train(params,
                     lgb_train,
-                    num_boost_round=args.num_round,
+                    num_boost_round=args.num_rounds,
                     valid_sets=lgb_eval)
+    elapsed = time.time() - start
+    pred = gbm.predict(data.X_test)
+    metric = eval(data, pred)
+    return elapsed,metric
 
+def train_lightgbm_cpu(data, df, args):
+    if 'lightgbm-cpu' not in args.algs:
+        return
+    params = configure_lightgbm(data,use_gpu=False)
+    elapsed,metric = run_lightgbm(data,params,args)
+    add_data(df, 'lightgbm-cpu', data, elapsed, metric)
+
+def train_lightgbm_gpu(data, df, args):
+    if 'lightgbm-gpu' not in args.algs:
+        return
+    params = configure_lightgbm(data, use_gpu=True)
+    elapsed,metric = run_lightgbm(data,params,args)
+    add_data(df, 'lightgbm-gpu', data, elapsed, metric)
 
 class Experiment:
     def __init__(self, data_func, name, task, metric):
@@ -132,6 +175,8 @@ class Experiment:
         data = Data(X, y, self.name, self.task, self.metric)
         train_xgboost_cpu(data, df, args)
         train_xgboost_gpu(data, df, args)
+        train_lightgbm_cpu(data, df, args)
+        train_lightgbm_gpu(data, df, args)
 
 
 experiments = [
@@ -152,6 +197,7 @@ def main():
     parser.add_argument('--rows', type=int, default=None)
     parser.add_argument('--num_rounds', type=int, default=500)
     parser.add_argument('--datasets', default=all_dataset_names)
+    parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-cpu')
     args = parser.parse_args()
     df = pd.DataFrame()
     for exp in experiments:

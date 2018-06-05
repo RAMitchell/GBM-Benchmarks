@@ -2,7 +2,7 @@
 
 set -e
 
-xgboost_commit=b7cbec4d4bf3e102164f083638d41de0aafa2999
+xgboost_commit=286dccb8e85b053cebc829e06f018dce184306d9
 catboost_commit=27294dbe0b72a33f3655b2da88c771616781c062
 lightgbm_commit=f660b5fe4148fc3f5985b10c1fea969b695cb8de
 
@@ -35,5 +35,9 @@ END
 rm -rf LightGBM
 git clone --recursive https://github.com/Microsoft/LightGBM ; cd LightGBM
 git checkout ${lightgbm_commit}
+mkdir build ; cd build
+cmake -DUSE_GPU=1 ..
+make -j$(nproc)
 cd ../python-package
-python setup.py install --gpu
+python setup.py install --precompile
+cd ..
