@@ -1,8 +1,8 @@
 import argparse
-import time
 import sys
+import time
 
-sys.path.insert(0,'catboost/catboost/python-package')
+sys.path.insert(0, 'catboost/catboost/python-package')
 import catboost as cat
 import lightgbm as lgb
 import ml_dataset_loader.datasets as data_loader
@@ -14,6 +14,12 @@ from sklearn.model_selection import train_test_split
 
 # Global parameters
 random_seed = 0
+max_depth = 6
+learning_rate = 0.1
+min_split_loss = 0
+min_weight = 1
+l1_reg = 0
+l2_reg = 1
 
 
 class Data:
@@ -54,8 +60,8 @@ def add_data(df, algorithm, data, elapsed, metric):
     time_col = (data.name, 'Time(s)')
     metric_col = (data.name, data.metric)
     try:
-        df.insert(len(df.columns), time_col, float(0))
-        df.insert(len(df.columns), metric_col, float(0))
+        df.insert(len(df.columns), time_col, '-')
+        df.insert(len(df.columns), metric_col, '-')
     except:
         pass
 
@@ -64,8 +70,9 @@ def add_data(df, algorithm, data, elapsed, metric):
 
 
 def configure_xgboost(data, use_gpu):
-    params = {'max_depth': 0, 'grow_policy': 'lossguide',
-                   'max_leaves': 2 ** 6, 'learning_rate': 0.1}
+    params = {'max_depth': max_depth,
+              'learning_rate': learning_rate, 'n_gpus': -1, 'min_split_loss': min_split_loss,
+              'min_child_weight': min_weight, 'alpha': l1_reg, 'lambda': l2_reg}
     if use_gpu:
         params['tree_method'] = 'gpu_hist'
     else:
@@ -87,12 +94,16 @@ def configure_xgboost(data, use_gpu):
 
     return params
 
+
 def configure_lightgbm(data, use_gpu):
     params = {
         'task': 'train',
         'boosting_type': 'gbdt',
-        'num_leaves': 2 ** 6,
-        'learning_rate': 0.1, 'min_data_in_leaf': 0, 'min_sum_hessian_in_leaf': 1, 'lambda_l2': 1}
+        'max_depth': max_depth,
+        'num_leaves': 2 ** 8,
+        'learning_rate': learning_rate, 'min_data_in_leaf': 0,
+        'min_sum_hessian_in_leaf': 1, 'lambda_l2': 1, 'min_split_gain': min_split_loss,
+        'min_child_weight': min_weight, 'lambda_l1': l1_reg, 'lambda_l2': l2_reg}
 
     if use_gpu:
         params["device"] = "gpu"
@@ -109,6 +120,18 @@ def configure_lightgbm(data, use_gpu):
 
     return params
 
+
+def configure_catboost(data, use_gpu):
+    params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg}
+    if use_gpu:
+        params['task_type'] = 'GPU'
+    if data.task == "Multiclass classification":
+        params['loss_function'] = 'MultiClass'
+        params["classes_count"] = np.max(data.y_test) + 1
+        params["eval_metric"] = 'MultiClass'
+    return params
+
+
 def run_xgboost(data, params, args):
     dtrain = xgb.DMatrix(data.X_train, data.y_train)
     dval = xgb.DMatrix(data.X_val, data.y_val)
@@ -121,20 +144,13 @@ def run_xgboost(data, params, args):
     return elapsed, metric
 
 
-def train_xgboost_cpu(data, df, args):
-    if 'xgb-cpu-hist' not in args.algs:
+def train_xgboost(alg, data, df, args):
+    if alg not in args.algs:
         return
-    params = configure_xgboost(data, use_gpu=False)
+    use_gpu = True if 'gpu' in alg else False
+    params = configure_xgboost(data, use_gpu)
     elapsed, metric = run_xgboost(data, params, args)
-    add_data(df, 'xgb-cpu-hist', data, elapsed, metric)
-
-
-def train_xgboost_gpu(data, df, args):
-    if 'xgb-gpu-hist' not in args.algs:
-        return
-    params = configure_xgboost(data, use_gpu=True)
-    elapsed, metric = run_xgboost(data, params, args)
-    add_data(df, 'xgb-gpu-hist', data, elapsed, metric)
+    add_data(df, alg, data, elapsed, metric)
 
 
 def run_lightgbm(data, params, args):
@@ -148,33 +164,62 @@ def run_lightgbm(data, params, args):
     elapsed = time.time() - start
     pred = gbm.predict(data.X_test)
     metric = eval(data, pred)
-    return elapsed,metric
+    return elapsed, metric
 
-def train_lightgbm_cpu(data, df, args):
-    if 'lightgbm-cpu' not in args.algs:
-        return
-    params = configure_lightgbm(data,use_gpu=False)
-    elapsed,metric = run_lightgbm(data,params,args)
-    add_data(df, 'lightgbm-cpu', data, elapsed, metric)
 
-def train_lightgbm_gpu(data, df, args):
-    if 'lightgbm-gpu' not in args.algs:
+def train_lightgbm(alg, data, df, args):
+    if alg not in args.algs:
         return
-    params = configure_lightgbm(data, use_gpu=True)
-    elapsed,metric = run_lightgbm(data,params,args)
-    add_data(df, 'lightgbm-gpu', data, elapsed, metric)
+    use_gpu = True if 'gpu' in alg else False
+    params = configure_lightgbm(data, use_gpu)
+    elapsed, metric = run_lightgbm(data, params, args)
+    add_data(df, alg, data, elapsed, metric)
+
 
 def run_catboost(data, params, args):
-    cat_train = cat.Pool(data.X_train,data.y_train)
-    cat_test = cat.Pool(data.X_test,data.y_test)
-    cat_val = cat.Pool(data.X_val,data.y_val)
+    cat_train = cat.Pool(data.X_train, data.y_train)
+    cat_test = cat.Pool(data.X_test, data.y_test)
+    cat_val = cat.Pool(data.X_val, data.y_val)
 
-def train_catboost_cpu(data, df, args):
-    if 'cat-cpu' not in args.algs:
+    params['iterations'] = args.num_rounds
+
+    if data.task is "Regression":
+        model = cat.CatBoostRegressor(**params)
+    else:
+        model = cat.CatBoostClassifier(**params)
+
+    start = time.time()
+    model.fit(cat_train, use_best_model=False, eval_set=cat_val)
+    elapsed = time.time() - start
+
+    if data.task == "Multiclass classification":
+        preds = model.predict_proba(cat_test)
+    else:
+        preds = model.predict(cat_test)
+
+    metric = eval(data, preds)
+    return elapsed, metric
+
+
+def train_catboost(alg, data, df, args):
+    if alg not in args.algs:
         return
-    params = {}
-    elapsed, metric = run_catboost(data,params,args)
-    add_data(df, 'cat-cpu', data, elapsed, metric)
+    use_gpu = True if 'gpu' in alg else False
+
+    # catboost GPU does not work with multiclass
+    if data.task == "Multiclass classification" and use_gpu:
+        add_data(df, alg, data, 'N/A', 'N/A')
+        return
+
+    # failure for Bosch
+    if data.name == "Bosch" and use_gpu:
+        add_data(df, alg, data, 'N/A', 'N/A')
+        return
+
+    params = configure_catboost(data, use_gpu)
+    elapsed, metric = run_catboost(data, params, args)
+    add_data(df, alg, data, elapsed, metric)
+
 
 class Experiment:
     def __init__(self, data_func, name, task, metric):
@@ -186,10 +231,12 @@ class Experiment:
     def run(self, df, args):
         X, y = self.data_func(num_rows=args.rows)
         data = Data(X, y, self.name, self.task, self.metric)
-        train_xgboost_cpu(data, df, args)
-        train_xgboost_gpu(data, df, args)
-        train_lightgbm_cpu(data, df, args)
-        train_lightgbm_gpu(data, df, args)
+        train_xgboost('xgb-cpu-hist', data, df, args)
+        train_xgboost('xgb-gpu-hist', data, df, args)
+        train_lightgbm('lightgbm-cpu', data, df, args)
+        train_lightgbm('lightgbm-gpu', data, df, args)
+        train_catboost('cat-cpu', data, df, args)
+        train_catboost('cat-gpu', data, df, args)
 
 
 experiments = [
@@ -206,12 +253,13 @@ def main():
     all_dataset_names = ''
     for exp in experiments:
         all_dataset_names += exp.name + ','
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--rows', type=int, default=None)
-    parser.add_argument('--num_rounds', type=int, default=500)
-    parser.add_argument('--datasets', default=all_dataset_names)
-    parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-cpu,'
-                                          'cat-cpu')
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--rows', type=int, default=None,
+                        help='Max rows to benchmark for each dataset.')
+    parser.add_argument('--num_rounds', type=int, default=500, help='Boosting rounds.')
+    parser.add_argument('--datasets', default=all_dataset_names, help='Datasets to run.')
+    parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-gpu,'
+                                          'cat-cpu,cat-gpu', help='Boosting algorithms to run.')
     args = parser.parse_args()
     df = pd.DataFrame()
     for exp in experiments:
