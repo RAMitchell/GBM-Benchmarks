@@ -6,6 +6,8 @@ xgboost_commit=286dccb8e85b053cebc829e06f018dce184306d9
 catboost_commit=27294dbe0b72a33f3655b2da88c771616781c062
 lightgbm_commit=f660b5fe4148fc3f5985b10c1fea969b695cb8de
 
+pyver="$(python -V 2>&1 | grep -Eo ' [0-9]\.' | grep -Eo '[0-9]')"
+
 # XGBoost
 rm -rf xgboost
 git clone https://github.com/dmlc/xgboost.git --recursive
@@ -16,7 +18,7 @@ cmake .. -DUSE_CUDA=ON -DUSE_NCCL=ON -DUSE_AVX=ON
 make -j4
 cd ..
 cd python-package/
-python setup.py install
+python setup.py install --user
 cd ../..
 
 # Catboost
@@ -25,7 +27,7 @@ git clone https://github.com/catboost/catboost.git
 cd catboost
 git checkout ${catboost_commit}
 cd catboost/python-package/catboost
-../../../ya make -r -DUSE_ARCADIA_PYTHON=no -DOS_SDK=local -DPYTHON_CONFIG=/usr/bin/python3-config
+../../../ya make -r -DUSE_ARCADIA_PYTHON=no -DOS_SDK=local -DPYTHON_CONFIG=/usr/bin/python${pyver}-config -DCUDA_ROOT=$(dirname $(dirname $(which nvcc)))
 cd ../../../..
 
 # LightGBM
@@ -36,5 +38,5 @@ mkdir build ; cd build
 cmake -DUSE_GPU=1 ..
 make -j$(nproc)
 cd ../python-package
-python setup.py install --precompile
+python setup.py install --precompile --user
 cd ..

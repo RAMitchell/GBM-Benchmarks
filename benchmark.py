@@ -248,6 +248,20 @@ experiments = [
     Experiment(data_loader.get_airline, "Airline", "Classification", "Accuracy"),
 ]
 
+def write_results(df, filename, format):
+    if format == "latex":
+        tmp_df = df.copy()
+        tmp_df.columns = pd.MultiIndex.from_tuples(tmp_df.columns)
+        with open(filename, "w") as file:
+            file.write(tmp_df.to_latex())
+    elif format == "csv":
+        with open(filename, "w") as file:
+            file.write(df.to_csv())
+    else:
+        raise ValueError("Unknown format: " + format)
+
+    print(format + " results written to: " + filename)
+
 
 def main():
     all_dataset_names = ''
@@ -265,12 +279,10 @@ def main():
     for exp in experiments:
         if exp.name in args.datasets:
             exp.run(df, args)
-    df.columns = pd.MultiIndex.from_tuples(df.columns)
-    print(df)
-    filename = "table.txt"
-    with open(filename, "w") as file:
-        file.write(df.to_latex())
-    print("Results written to: " + filename)
+        # Write partial results at each iteration in case of failure
+        print(df)
+        write_results(df, "results.latex","latex")
+        write_results(df, "results.csv","csv")
 
 
 if __name__ == "__main__":
