@@ -69,10 +69,10 @@ def add_data(df, algorithm, data, elapsed, metric):
     df.at[algorithm, metric_col] = metric
 
 
-def configure_xgboost(data, use_gpu):
+def configure_xgboost(data, use_gpu, args):
     params = {'max_depth': max_depth,
-              'learning_rate': learning_rate, 'n_gpus': -1, 'min_split_loss': min_split_loss,
-              'min_child_weight': min_weight, 'alpha': l1_reg, 'lambda': l2_reg}
+              'learning_rate': learning_rate, 'n_gpus': args.n_gpus, 'min_split_loss': min_split_loss,
+              'min_child_weight': min_weight, 'alpha': l1_reg, 'lambda': l2_reg, 'debug_verbose':args.debug_verbose}
     if use_gpu:
         params['tree_method'] = 'gpu_hist'
     else:
@@ -148,7 +148,7 @@ def train_xgboost(alg, data, df, args):
     if alg not in args.algs:
         return
     use_gpu = True if 'gpu' in alg else False
-    params = configure_xgboost(data, use_gpu)
+    params = configure_xgboost(data, use_gpu, args)
     elapsed, metric = run_xgboost(data, params, args)
     add_data(df, alg, data, elapsed, metric)
 
@@ -248,6 +248,7 @@ experiments = [
     Experiment(data_loader.get_airline, "Airline", "Classification", "Accuracy"),
 ]
 
+
 def write_results(df, filename, format):
     if format == "latex":
         tmp_df = df.copy()
@@ -272,6 +273,8 @@ def main():
                         help='Max rows to benchmark for each dataset.')
     parser.add_argument('--num_rounds', type=int, default=500, help='Boosting rounds.')
     parser.add_argument('--datasets', default=all_dataset_names, help='Datasets to run.')
+    parser.add_argument('--debug_verbose', type=int, default=1)
+    parser.add_argument('--n_gpus', type=int, default=-1)
     parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-gpu,'
                                           'cat-cpu,cat-gpu', help='Boosting algorithms to run.')
     args = parser.parse_args()
@@ -281,8 +284,8 @@ def main():
             exp.run(df, args)
         # Write partial results at each iteration in case of failure
         print(df)
-        write_results(df, "results.latex","latex")
-        write_results(df, "results.csv","csv")
+        write_results(df, "results.latex", "latex")
+        write_results(df, "results.csv", "csv")
 
 
 if __name__ == "__main__":
