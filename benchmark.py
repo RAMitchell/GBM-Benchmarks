@@ -3,8 +3,6 @@ import sys
 import time
 
 sys.path.insert(0, 'catboost/catboost/python-package')
-import catboost as cat
-import lightgbm as lgb
 import ml_dataset_loader.datasets as data_loader
 import numpy as np
 import pandas as pd
@@ -154,6 +152,7 @@ def train_xgboost(alg, data, df, args):
 
 
 def run_lightgbm(data, params, args):
+    import lightgbm as lgb
     lgb_train = lgb.Dataset(data.X_train, data.y_train)
     lgb_eval = lgb.Dataset(data.X_test, data.y_test, reference=lgb_train)
     start = time.time()
@@ -177,6 +176,7 @@ def train_lightgbm(alg, data, df, args):
 
 
 def run_catboost(data, params, args):
+    import catboost as cat
     cat_train = cat.Pool(data.X_train, data.y_train)
     cat_test = cat.Pool(data.X_test, data.y_test)
     cat_val = cat.Pool(data.X_val, data.y_val)
@@ -282,10 +282,10 @@ def main():
     for exp in experiments:
         if exp.name in args.datasets:
             exp.run(df, args)
-        # Write partial results at each iteration in case of failure
-        print(df)
-        write_results(df, "results.latex", "latex")
-        write_results(df, "results.csv", "csv")
+            # Write partial results at each iteration in case of failure
+            print(df.to_string())
+            write_results(df, "results.latex", "latex")
+            write_results(df, "results.csv", "csv")
 
 
 if __name__ == "__main__":

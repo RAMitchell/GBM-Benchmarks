@@ -14,7 +14,7 @@ git clone https://github.com/dmlc/xgboost.git --recursive
 cd xgboost
 git checkout ${xgboost_commit}
 mkdir build && cd build
-cmake .. -DUSE_CUDA=ON -DUSE_NCCL=ON -DUSE_AVX=ON
+cmake .. -DUSE_CUDA=ON -DUSE_NCCL=ON
 make -j4
 cd ..
 cd python-package/
