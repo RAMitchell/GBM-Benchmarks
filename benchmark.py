@@ -119,7 +119,7 @@ def configure_lightgbm(data, use_gpu):
     return params
 
 
-def configure_catboost(data, use_gpu):
+def configure_catboost(data, use_gpu, args):
     dev_arr = [i for i in range(0, int(args.n_gpus))] if args.n_gpus > 0 else [0]
     params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg, 'devices' : dev_arr}
     if use_gpu:
@@ -212,7 +212,7 @@ def train_catboost(alg, data, df, args):
         add_data(df, alg, data, 'N/A', 'N/A')
         return
 
-    params = configure_catboost(data, use_gpu)
+    params = configure_catboost(data, use_gpu, args)
     elapsed, metric = run_catboost(data, params, args)
     add_data(df, alg, data, elapsed, metric)
 
