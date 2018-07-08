@@ -120,7 +120,11 @@ def configure_lightgbm(data, use_gpu):
 
 
 def configure_catboost(data, use_gpu, args):
-    dev_arr = [i for i in range(0, int(args.n_gpus))] if args.n_gpus > 0 else [0]
+    if int(args.n_gpus) == -1:
+        dev_arr = "-1"
+    else:
+        dev_arr = [i for i in range(0, int(args.n_gpus))]
+
     params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg, 'devices' : dev_arr}
     if use_gpu:
         params['task_type'] = 'GPU'
