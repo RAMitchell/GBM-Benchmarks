@@ -3,7 +3,7 @@
 set -e
 
 xgboost_commit=286dccb8e85b053cebc829e06f018dce184306d9
-catboost_commit=27294dbe0b72a33f3655b2da88c771616781c062
+catboost_commit=4b78de61140c301244804f9b74f42774be9af346
 lightgbm_commit=f660b5fe4148fc3f5985b10c1fea969b695cb8de
 
 pyver="$(python -V 2>&1 | grep -Eo ' [0-9]\.' | grep -Eo '[0-9]')"

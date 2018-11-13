@@ -119,8 +119,13 @@ def configure_lightgbm(data, use_gpu):
     return params
 
 
-def configure_catboost(data, use_gpu):
-    params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg}
+def configure_catboost(data, use_gpu, args):
+    if int(args.n_gpus) == -1:
+        dev_arr = "-1"
+    else:
+        dev_arr = [i for i in range(0, int(args.n_gpus))]
+
+    params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg, 'devices' : dev_arr}
     if use_gpu:
         params['task_type'] = 'GPU'
     if data.task == "Multiclass classification":
@@ -211,12 +216,7 @@ def train_catboost(alg, data, df, args):
         add_data(df, alg, data, 'N/A', 'N/A')
         return
 
-    # failure for Bosch
-    if data.name == "Bosch" and use_gpu:
-        add_data(df, alg, data, 'N/A', 'N/A')
-        return
-
-    params = configure_catboost(data, use_gpu)
+    params = configure_catboost(data, use_gpu, args)
     elapsed, metric = run_catboost(data, params, args)
     add_data(df, alg, data, elapsed, metric)
 
