@@ -63,14 +63,16 @@ def add_data(df, algorithm, data, elapsed, metric):
     except:
         pass
 
-    df.at[algorithm, time_col] = elapsed
-    df.at[algorithm, metric_col] = metric
+    df.at[algorithm, time_col] = "{0:.6g}".format(elapsed)
+    df.at[algorithm, metric_col] = "{0:.6g}".format(metric)
 
 
 def configure_xgboost(data, use_gpu, args):
     params = {'max_depth': max_depth,
-              'learning_rate': learning_rate, 'n_gpus': args.n_gpus, 'min_split_loss': min_split_loss,
-              'min_child_weight': min_weight, 'alpha': l1_reg, 'lambda': l2_reg, 'debug_verbose':args.debug_verbose}
+              'learning_rate': learning_rate, 'parallel_tree_policy': args.xgb_parallel_strategy, 'n_gpus': args.n_gpus,
+              'gpu_id': args.gpu_id,
+              'min_split_loss': min_split_loss,
+              'min_child_weight': min_weight, 'alpha': l1_reg, 'lambda': l2_reg, 'debug_verbose': args.debug_verbose}
     if use_gpu:
         params['tree_method'] = 'gpu_hist'
     else:
@@ -78,15 +80,11 @@ def configure_xgboost(data, use_gpu, args):
 
     if data.task == "Regression":
         params["objective"] = "reg:linear"
-        if use_gpu:
-            params["objective"] = "gpu:" + params["objective"]
     elif data.task == "Multiclass classification":
         params["objective"] = "multi:softmax"
         params["num_class"] = np.max(data.y_test) + 1
     elif data.task == "Classification":
         params["objective"] = "binary:logistic"
-        if use_gpu:
-            params["objective"] = "gpu:" + params["objective"]
     else:
         raise ValueError("Unknown task: " + data.task)
 
@@ -125,7 +123,7 @@ def configure_catboost(data, use_gpu, args):
     else:
         dev_arr = [i for i in range(0, int(args.n_gpus))]
 
-    params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg, 'devices' : dev_arr}
+    params = {'learning_rate': learning_rate, 'depth': max_depth, 'l2_leaf_reg': l2_reg, 'devices': dev_arr}
     if use_gpu:
         params['task_type'] = 'GPU'
     if data.task == "Multiclass classification":
@@ -273,8 +271,10 @@ def main():
                         help='Max rows to benchmark for each dataset.')
     parser.add_argument('--num_rounds', type=int, default=500, help='Boosting rounds.')
     parser.add_argument('--datasets', default=all_dataset_names, help='Datasets to run.')
-    parser.add_argument('--debug_verbose', type=int, default=1)
+    parser.add_argument('--xgb_parallel_strategy', default='parallel_voting', help='Multi-GPU parallel strategy.')
+    parser.add_argument('--debug_verbose', type=int, default=0)
     parser.add_argument('--n_gpus', type=int, default=-1)
+    parser.add_argument('--gpu_id', type=int, default=0)
     parser.add_argument('--algs', default='xgb-cpu-hist,xgb-gpu-hist,lightgbm-cpu,lightgbm-gpu,'
                                           'cat-cpu,cat-gpu', help='Boosting algorithms to run.')
     args = parser.parse_args()
