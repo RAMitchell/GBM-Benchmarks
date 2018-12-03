@@ -244,6 +244,7 @@ experiments = [
     Experiment(data_loader.get_cover_type, "Cover Type", "Multiclass classification", "Accuracy"),
     Experiment(data_loader.get_bosch, "Bosch", "Classification", "Accuracy"),
     Experiment(data_loader.get_airline, "Airline", "Classification", "Accuracy"),
+    Experiment(data_loader.get_epsilon, "Epsilon", "Classification", "Accuracy"),
 ]
 
 
