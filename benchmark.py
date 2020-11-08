@@ -33,7 +33,7 @@ class Data:
 
         self.X_train, self.X_val, self.y_train, self.y_val = train_test_split(self.X_train,
                                                                               self.y_train,
-                                                                              test_size=validation_size / train_size,
+                                                                              test_size=validation_size / (1 - test_size),
                                                                               random_state=random_seed)
 
         assert (self.X_train.shape[0] + self.X_val.shape[0] + self.X_test.shape[0]) == X.shape[0]
